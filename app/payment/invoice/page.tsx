@@ -87,7 +87,7 @@ function InvoiceContent() {
           // Send to Backend
           await axios.post(`${API_URL}/payment/subscribe`, {
               package_id: packageId,
-              billing_period: billingPeriod === 'single' ? 'One-Time' : 'Monthly',
+              billing_period: billingPeriod === 'single' ? 'single' : 'monthly',
               num_employees: validEmployees
           }, {
               headers: { Authorization: `Bearer ${token}` }
