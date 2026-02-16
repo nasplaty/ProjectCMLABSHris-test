@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Icon } from '@iconify/react'
+import { API_URL } from "../../utils/config";
 
 function ResetPasswordContent() {
   const router = useRouter()
@@ -43,7 +44,7 @@ function ResetPasswordContent() {
 
     try {
       // 2. Send request to backend
-      const res = await fetch('http://localhost:5000/api/auth/force-reset-password', {
+      const res = await fetch(`${config.API_URL}/auth/force-reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
