@@ -11,18 +11,23 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
 
   const handleResetRequest = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
+  e.preventDefault()
+  setIsLoading(true)
 
-    // Save email as bridge for reset page
-    localStorage.setItem('reset_email', email)
+  console.log("1. Attempting to save email:", email)
 
-    // Simulate API call
-    await new Promise((r) => setTimeout(r, 1500))
+  // Save email as bridge for reset page
+  localStorage.setItem('reset_email', email)
 
-    router.push('/forgot-password/sent')
-    setIsLoading(false)
-  }
+  // Immediately check if it actually saved
+  console.log("2. Verified in storage:", localStorage.getItem('reset_email'))
+
+  // Simulate API call
+  await new Promise((r) => setTimeout(r, 1500))
+
+  router.push('/forgot-password/sent')
+  setIsLoading(false)
+}
 
   return (
     <div className="fixed inset-0 bg-white z-50 overflow-y-auto font-['Inter']">

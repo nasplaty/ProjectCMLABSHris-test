@@ -30,10 +30,43 @@ function ResetPasswordContent() {
       return
     }
 
+    // 1. Retrieve the real email from storage
+    const email = localStorage.getItem('reset_email')
+
+    if (!email) {
+      alert('Session expired. Please try the "Forgot Password" process again.')
+      router.push('/forgot-password')
+      return
+    }
+
     setIsLoading(true)
-    await new Promise((r) => setTimeout(r, 1500))
-    setIsLoading(false)
-    setView('success')
+
+    try {
+      // 2. Send request to backend
+      const res = await fetch('http://localhost:5000/api/auth/force-reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: email, 
+          newPassword: newPassword 
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to reset password')
+      }
+
+      // 3. Success! Clear storage and show success view
+      localStorage.removeItem('reset_email')
+      setView('success')
+
+    } catch (error: any) {
+      alert(error.message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -61,7 +94,7 @@ function ResetPasswordContent() {
                 Your new password must be at least 8 characters.
               </p>
 
-              <form onSubmit={handleSubmit} className="space-y-6 text-left">
+              <form onSubmit={handleSubmit} className="space-y-6 text-left" noValidate>
 
                 {/* New password */}
                 <div>
