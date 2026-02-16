@@ -44,7 +44,7 @@ function ResetPasswordContent() {
 
     try {
       // 2. Send request to backend
-      const res = await fetch(`${config.API_URL}/auth/force-reset-password`, {
+      const res = await fetch(`${API_URL}/auth/force-reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
