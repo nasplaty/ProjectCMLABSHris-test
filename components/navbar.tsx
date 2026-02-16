@@ -19,13 +19,14 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // --- STATE BARU UNTUK SUBSCRIPTION ---
+  const [subscriptionData, setSubscriptionData] = useState<any>(null);
 
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // --- 1. INIT ---
-  
   // --- 1. INIT & REFRESH ON NAVIGATION ---
   useEffect(() => {
     const checkUser = () => {
@@ -51,17 +52,18 @@ export default function Navbar() {
     
     return () => window.removeEventListener("storage", checkUser);
     
-  }, [pathname]); // <--- THIS [pathname] IS THE KEY FIX!
+  }, [pathname]);
 
-  // --- 2. NOTIFICATIONS ---
+  // --- 2. FETCH DATA (NOTIFICATIONS & SUBSCRIPTION) ---
   useEffect(() => {
     if (!user) return;
 
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    // A. FETCH NOTIFICATIONS
     const fetchNotifications = async () => {
       try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-
         let newNotifs: any[] = [];
 
         // ADMIN: Check waiting attendance
@@ -109,7 +111,29 @@ export default function Navbar() {
       }
     };
 
+    // B. FETCH SUBSCRIPTION (NEW LOGIC)
+    const fetchSubscription = async () => {
+        // Hanya fetch jika user adalah admin
+        if (['admin_company', 'admin_system'].includes(user.role)) {
+            try {
+                // Pastikan endpoint ini ada di backend Anda!
+                // Di dalam Navbar.tsx
+                const res = await axios.get(`${API_URL}/payment/subscription/current`, { // Pastikan "subscription" (tunggal)
+                    headers: { Authorization: `Bearer ${token}` }
+                });                 
+                // Asumsi response backend mengembalikan object subscription langsung atau di dalam data
+                setSubscriptionData(res.data.data || res.data); 
+            } catch (err) {
+                console.error("Subscription Fetch Error", err);
+                // Opsional: set null jika gagal/404
+                setSubscriptionData(null);
+            }
+        }
+    };
+
     fetchNotifications();
+    fetchSubscription(); // Panggil fungsi subscription
+
     const interval = setInterval(fetchNotifications, 60000);
     return () => clearInterval(interval);
   }, [user]);
@@ -125,7 +149,6 @@ export default function Navbar() {
     if (user?.first_name && user?.last_name) {
         return `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase();
     }
-    // Fallback if name is missing (e.g. backend issue)
     return user?.email?.charAt(0).toUpperCase() || "?";
   };
 
@@ -211,22 +234,63 @@ export default function Navbar() {
           </button>
 
           {isProfileOpen && (
-            <div className="absolute right-0 top-14 w-56 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2">
+            <div className="absolute right-0 top-14 w-60 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2">
                 <div className="py-1">
-                    {/* STRICT ADMIN CHECK for Subscription */}
-                    {isAdmin && (
-                        <Link href="/payment" className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => setIsProfileOpen(false)}>
-                            <Icon icon="mdi:star-outline" className="text-yellow-500"/> Subscription
-                        </Link>
-                    )}
                     
-                    {/* Updated Change Password Link */}
-                    <Link href="/forgot-password" className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => setIsProfileOpen(false)}>
-                        <Icon icon="mdi:lock-outline" /> Change Password
+                {/* STRICT ADMIN CHECK for Subscription */}
+                {isAdmin && (
+                    <Link 
+                        href="/payment" 
+                        className="flex items-center justify-between px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 group border-b border-gray-50" 
+                        onClick={() => setIsProfileOpen(false)}
+                    >
+                        <div className="flex items-center gap-3">
+                            {/* Icon Background */}
+                            <div className="p-1.5 bg-yellow-50 rounded-full">
+                                <Icon icon="mdi:star-outline" className="text-yellow-600 text-lg"/> 
+                            </div>
+                            
+                            <div className="flex flex-col text-left">
+                                <span className="font-medium text-gray-800">Subscription</span>
+                                
+                                {/* LOGIC STATUS & DETAIL */}
+                                {subscriptionData ? (
+                                    <div className="flex flex-col gap-0.5">
+                                        {/* 1. Status & Tanggal */}
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[10px] uppercase font-bold tracking-wider ${
+                                                subscriptionData.status === 'active' ? 'text-green-600' : 
+                                                subscriptionData.status === 'pending' ? 'text-orange-500' : 'text-red-500'
+                                            }`}>
+                                                {subscriptionData.status}
+                                            </span>
+                                            
+                                            {subscriptionData.status === 'active' && subscriptionData.end_date && (
+                                                <span className="text-[9px] text-gray-400 font-normal">
+                                                    • Exp: {new Date(subscriptionData.end_date).toLocaleDateString('id-ID')}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* 2. BARU: Jumlah Karyawan (Quota) */}
+                                        {subscriptionData.num_employees && (
+                                            <div className="flex items-center text-[10px] text-gray-500 font-medium">
+                                                <Icon icon="mdi:account-group-outline" className="w-3 h-3 mr-1" />
+                                                <span>{subscriptionData.num_employees} Employees Quota</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <span className="text-[10px] text-gray-400">Loading info...</span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Panah */}
+                        <Icon icon="mdi:chevron-right" className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </Link>
-                    
-                    <div className="border-t border-gray-100 my-1"></div>
-                    <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 text-left">
+                )}
+                    <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 text-left mt-1 pl-6">
                         <Icon icon="mdi:logout" /> Log Out
                     </button>
                 </div>

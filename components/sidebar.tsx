@@ -192,7 +192,11 @@ export default function Sidebar() {
                   <Icon icon="mdi:account-edit-outline" className="text-lg" />
                   Edit Profile
               </button>
-              
+
+                    <Link href="/forgot-password" className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => setShowSettingsMenu(false)}>
+                        <Icon icon="mdi:lock-outline" /> Change Password
+                    </Link>
+
           </div>
       </div>
     )}
