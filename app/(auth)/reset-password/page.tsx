@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Icon } from '@iconify/react'
-import { API_URL } from "../../utils/config";
+import { API_URL } from "../../../utils/config";
 
 function ResetPasswordContent() {
   const router = useRouter()
