@@ -306,7 +306,6 @@ export default function Navbar() {
                 <div className="border-b border-gray-200 p-4 flex items-center gap-3">
                     <Icon icon="mdi:magnify" className="text-gray-400 text-xl" />
                     <input autoFocus type="text" placeholder="Type a command or search..." className="flex-1 outline-none text-lg text-gray-800 placeholder-gray-400" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}/>
-                    <button onClick={() => setIsSearchOpen(false)} className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-500">ESC</button>
                 </div>
                 <div className="max-h-[300px] overflow-y-auto p-2">
                     {filteredCommands.map((cmd, idx) => (

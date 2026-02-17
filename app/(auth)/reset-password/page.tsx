@@ -109,7 +109,7 @@ function ResetPasswordContent() {
                       onChange={(e) => setNewPassword(e.target.value)}
                       required
                       minLength={8}
-                      className="w-full h-[50px] px-4 rounded-[5px] border-2 border-[#d8dde1] focus:border-[#1e3a5f] outline-none transition-all"
+                      className="w-full h-[50px] px-4 rounded-[5px] border-2 border-[#d8dde1] focus:border-[#1e3a5f] outline-none transition-all text-black"
                       placeholder="••••••••"
                     />
                     <button
@@ -134,7 +134,7 @@ function ResetPasswordContent() {
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required
                       minLength={8}
-                      className="w-full h-[50px] px-4 rounded-[5px] border-2 border-[#d8dde1] focus:border-[#1e3a5f] outline-none transition-all"
+                      className="w-full h-[50px] px-4 rounded-[5px] border-2 border-[#d8dde1] focus:border-[#1e3a5f] outline-none transition-all text-black"
                       placeholder="••••••••"
                     />
                     <button

@@ -130,8 +130,23 @@ export default function EmployeePage() {
       fetchEmployees();
       resetForm();
     } catch (error: any) {
-      const msg = error.response?.data?.message || "Gagal menyimpan data.";
-      alert(msg);
+      console.error("Error Detail:", error.response?.data); // See it in console (F12)
+      
+      const resData = error.response?.data;
+      let displayMessage = "Gagal menyimpan data.";
+
+      if (resData) {
+        // 1. Check if there is a specific 'error' detail (The SQL error)
+        if (resData.error) {
+            displayMessage = `Error Detail: ${resData.error}`;
+        } 
+        // 2. Fallback to the general 'message'
+        else if (resData.message) {
+            displayMessage = resData.message;
+        }
+      }
+
+      alert(displayMessage);
     } finally {
       setLoading(false);
     }
