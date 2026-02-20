@@ -41,14 +41,29 @@ export default function EmployeePage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [editId, setEditId] = useState<number | null>(null); 
 
+  // State UI Modal (Import)
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [importProgress, setImportProgress] = useState(0);
+  const [isImporting, setIsImporting] = useState(false);
+
   // State UI Drawer (Detail View)
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
-  // State Filter
+  // ==========================================================================
+  // FILTER & SORTING STATE
+  // ==========================================================================
   const [showFilter, setShowFilter] = useState(false);
   const [filterId, setFilterId] = useState("");
-  const [filterName, setFilterName] = useState("");
+  const [filterName, setFilterName] = useState(""); // From Search bar
+  
+  // Dynamic Dropdown States
   const [filterGender, setFilterGender] = useState("All");
+  const [filterBranch, setFilterBranch] = useState("All");
+  const [filterPosition, setFilterPosition] = useState("All");
+  const [filterGrade, setFilterGrade] = useState("All");
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [sortOption, setSortOption] = useState("Default");
 
   // Initial Form State
   const initialFormState = {
@@ -75,7 +90,7 @@ export default function EmployeePage() {
       const token = localStorage.getItem("token");
       if (!token) { router.push("/login"); return; }
 
-      const response = await axios.get(`${API_URL}/employees?limit=100`, {
+      const response = await axios.get(`${API_URL}/employees?limit=2000`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setEmployees(response.data.data);
@@ -93,7 +108,190 @@ export default function EmployeePage() {
     fetchEmployees();
   }, []);
 
-  // --- LOGIC BUTTONS ---
+  // ==========================================================================
+  // SMART DYNAMIC OPTIONS EXTRACTOR
+  // Scans the current data to generate dropdown options automatically
+  // ==========================================================================
+  const uniqueBranches = Array.from(new Set(employees.map(item => item.branch))).filter(Boolean).sort();
+  const uniquePositions = Array.from(new Set(employees.map(item => item.position))).filter(Boolean).sort();
+  const uniqueGenders = Array.from(new Set(employees.map(item => item.gender))).filter(Boolean).sort();
+  const uniqueGrades = Array.from(new Set(employees.map(item => item.grade))).filter(Boolean).sort();
+  const uniqueStatuses = Array.from(new Set(employees.map(item => item.employment_status))).filter(Boolean).sort();
+
+
+  // ========================================================================
+  // --- EXPORT FUNCTION ---
+  // ========================================================================
+  const handleExport = () => {
+    if (employees.length === 0) {
+        alert("No data to export");
+        return;
+    }
+
+    const headers = [
+        "ID", "First Name", "Last Name", "Email", "Phone", "Gender", 
+        "Branch", "Position", "Grade", "Status", "NIK", 
+        "Bank Name", "Account Number", "Account Holder"
+    ];
+
+    const csvRows = [];
+    csvRows.push("sep=,"); // Force Excel separator
+    csvRows.push(headers.join(","));
+
+    employees.forEach(emp => {
+        const row = [
+            emp.id,
+            `"${emp.first_name || ''}"`, 
+            `"${emp.last_name || ''}"`,
+            `"${emp.email || ''}"`,
+            `"${emp.phone || ''}"`,
+            emp.gender,
+            `"${emp.branch || ''}"`,
+            `"${emp.position || ''}"`,
+            `"${emp.grade || ''}"`,
+            emp.employment_status,
+            `'${emp.nik || ''}`, // Force string for numbers
+            `"${emp.bank_name || ''}"`,
+            `'${emp.bank_account_number || ''}`,
+            `"${emp.bank_account_holder || ''}"`
+        ];
+        csvRows.push(row.join(","));
+    });
+
+    const csvString = csvRows.join("\n");
+    const blob = new Blob(["\uFEFF" + csvString], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `employees_export_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  // ========================================================================
+  // --- IMPORT FUNCTIONS ---
+  // ========================================================================
+  
+  const handleDownloadTemplate = () => {
+    const headers = [
+        "first_name", "last_name", "email", "password", "phone", "gender", 
+        "branch", "position", "grade", "employment_status", "nik", 
+        "education", "place_of_birth", "date_of_birth", 
+        "bank_name", "bank_account_number", "bank_account_holder"
+    ];
+    
+    const instructions = [
+        "Teks (Wajib)", "Teks (Wajib)", "Email (Wajib)", "Minimal 6 Karakter", "Angka (Boleh kosong)", "Pilih: male / female / other",
+        "Teks", "Teks", "Teks", "Pilih: tetap_permanen / tetap_percobaan / pkwt / magang / resign", "Angka", 
+        "Teks", "Teks", "Format: YYYY-MM-DD", 
+        "Teks", "Angka", "Teks"
+    ];
+
+    const example = [
+        "John", "Doe", "john.doe@example.com", "password123", "08123456789", "male",
+        "Jakarta Pusat", "Staff HR", "Level 1", "pkwt", "3201234567890", 
+        "S1 Hukum", "Jakarta", "1995-08-17", 
+        "BCA", "1234567890", "John Doe"
+    ];
+
+    const csvRows = [];
+    csvRows.push("sep=,"); 
+    csvRows.push(headers.join(","));
+    csvRows.push(instructions.map(text => `"[ INFO: ${text} ]"`).join(","));
+    csvRows.push(example.map(text => `"${text}"`).join(","));
+
+    const csvString = csvRows.join("\n");
+    const blob = new Blob(["\uFEFF" + csvString], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "employee_import_template.csv";
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const text = event.target?.result as string;
+        if (!text) return;
+
+        let lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line);
+        if (lines[0].toLowerCase().startsWith("sep=")) lines.shift(); 
+
+        if (lines.length < 2) {
+            alert("File is empty or missing headers");
+            return;
+        }
+
+        const delimiter = lines[0].includes(";") && !lines[0].includes(",") ? ";" : ",";
+        const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
+        
+        const result = [];
+        let startIndex = 1;
+        if (lines[1].includes("[ INFO:")) startIndex = 2; 
+
+        for (let i = startIndex; i < lines.length; i++) {
+            const regex = new RegExp(`\\s*${delimiter}\\s*(?=(?:[^"]*"[^"]*")*[^"]*$)`);
+            const currentLine = lines[i].split(regex);
+            
+            if (currentLine.length < headers.length - 2) continue; 
+
+            const obj: any = {};
+            headers.forEach((header, index) => {
+                let value = currentLine[index]?.trim() || "";
+                if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+                obj[header] = value;
+            });
+            
+            if (obj.email) result.push(obj);
+        }
+        setImportData(result);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleBulkImport = async () => {
+    if (importData.length === 0) return;
+    setIsImporting(true);
+    setImportProgress(0);
+
+    const token = localStorage.getItem("token");
+    const headers = { Authorization: `Bearer ${token}` };
+    
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < importData.length; i++) {
+        const row = importData[i];
+        try {
+            if (!row.password) row.password = "123456"; 
+            if (!row.gender || !['male','female','other'].includes(row.gender)) row.gender = "male";
+            if (!row.employment_status || !['tetap_permanen','tetap_percobaan','pkwt','magang','resign'].includes(row.employment_status)) row.employment_status = "pkwt";
+            if (!row.date_of_birth || row.date_of_birth === "") row.date_of_birth = null;
+
+            await axios.post(`${API_URL}/employees`, row, { headers });
+            successCount++;
+        } catch (err) {
+            console.error(`Failed to import row ${i + 1} (${row.email})`, err);
+            failCount++;
+        }
+        setImportProgress(Math.round(((i + 1) / importData.length) * 100));
+    }
+
+    setIsImporting(false);
+    alert(`Import Complete!\nSuccess: ${successCount}\nFailed: ${failCount}`);
+    setShowImportModal(false);
+    setImportData([]);
+    fetchEmployees();
+  };
+
+  // ========================================================================
+  // --- FORM CRUD LOGIC ---
+  // ========================================================================
   const handleEdit = (emp: Employee) => {
     setEditId(emp.id);
     setFormData({
@@ -116,13 +314,11 @@ export default function EmployeePage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       if (editId) {
-        // Update
         const payload = { ...formData };
         if (!payload.password) delete (payload as any).password;
         await axios.put(`${API_URL}/employees/${editId}`, payload, { headers });
         alert("Sukses update data karyawan!");
       } else {
-        // Create
         await axios.post(`${API_URL}/employees`, formData, { headers });
         alert("Sukses menambah karyawan!");
       }
@@ -130,22 +326,13 @@ export default function EmployeePage() {
       fetchEmployees();
       resetForm();
     } catch (error: any) {
-      console.error("Error Detail:", error.response?.data); // See it in console (F12)
-      
+      console.error("Error Detail:", error.response?.data);
       const resData = error.response?.data;
       let displayMessage = "Gagal menyimpan data.";
-
       if (resData) {
-        // 1. Check if there is a specific 'error' detail (The SQL error)
-        if (resData.error) {
-            displayMessage = `Error Detail: ${resData.error}`;
-        } 
-        // 2. Fallback to the general 'message'
-        else if (resData.message) {
-            displayMessage = resData.message;
-        }
+        if (resData.error) displayMessage = `Error Detail: ${resData.error}`;
+        else if (resData.message) displayMessage = resData.message;
       }
-
       alert(displayMessage);
     } finally {
       setLoading(false);
@@ -175,18 +362,46 @@ export default function EmployeePage() {
     if (file) setAvatarPreview(URL.createObjectURL(file));
   };
 
-  // --- FILTER & HELPERS ---
+  // ========================================================================
+  // --- FILTER ENGINE ---
+  // ========================================================================
+  
+  const clearFilters = () => {
+    setFilterId("");
+    setFilterName("");
+    setFilterGender("All");
+    setFilterBranch("All");
+    setFilterPosition("All");
+    setFilterGrade("All");
+    setFilterStatus("All");
+    setSortOption("Default");
+    setShowFilter(false);
+  };
+
   const filteredEmployees = employees.filter((emp) => {
     const fullName = `${emp.first_name} ${emp.last_name}`;
+    
+    // Search by ID or Name
     const matchesId = filterId === "" || emp.id.toString().includes(filterId);
     const matchesName = filterName === "" || fullName.toLowerCase().includes(filterName.toLowerCase());
     
-    let dbGender = filterGender;
-    if(filterGender === 'Laki-laki') dbGender = 'male';
-    if(filterGender === 'Perempuan') dbGender = 'female';
+    // Dynamic Dropdowns
+    const matchesGender = filterGender === "All" || emp.gender === filterGender;
+    const matchesBranch = filterBranch === "All" || emp.branch === filterBranch;
+    const matchesPosition = filterPosition === "All" || emp.position === filterPosition;
+    const matchesGrade = filterGrade === "All" || emp.grade === filterGrade;
+    const matchesStatus = filterStatus === "All" || emp.employment_status === filterStatus;
 
-    const matchesGender = filterGender === "All" || emp.gender === dbGender;
-    return matchesId && matchesName && matchesGender;
+    return matchesId && matchesName && matchesGender && matchesBranch && matchesPosition && matchesGrade && matchesStatus;
+  }).sort((a, b) => {
+    // Sorting Logic
+    switch (sortOption) {
+      case "Name A-Z": return a.first_name.localeCompare(b.first_name);
+      case "Name Z-A": return b.first_name.localeCompare(a.first_name);
+      case "Date Newest": return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      case "Date Oldest": return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+      default: return 0;
+    }
   });
 
   const getStatusBadge = (status: string) => {
@@ -211,7 +426,6 @@ export default function EmployeePage() {
     }
   };
 
-  // Logic Hitung Full Time (Aman untuk data lama 'tetap')
   const fullTimeCount = employees.filter(e => 
     e.employment_status === 'tetap_permanen' || 
     e.employment_status === 'tetap_percobaan'
@@ -255,82 +469,178 @@ export default function EmployeePage() {
 
         <div className="relative flex-1">
           <input
-            type="text" placeholder="Search Employee" value={filterName} onChange={(e) => setFilterName(e.target.value)}
+            type="text" placeholder="Search Employee Name" value={filterName} onChange={(e) => setFilterName(e.target.value)}
             className="w-full rounded-lg border border-gray-400 bg-gray-10 px-4 py-2 pl-10 text-base text-black placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
           />
           <Icon icon="mdi:magnify" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 text-xl" />
         </div>
 
-        <button onClick={() => setShowFilter(!showFilter)} className="border border-gray-800 px-4 py-2 rounded hover:bg-gray-100 flex items-center gap-2 text-black">
-          <Icon icon="mage:filter-fill" className="w-5 h-5" /> Filter
-        </button>
+        <div className="relative">
+            <button onClick={() => setShowFilter(!showFilter)} className="border border-gray-800 px-4 py-2 rounded hover:bg-gray-100 flex items-center gap-2 text-black">
+                <Icon icon="mage:filter-fill" className="w-5 h-5" /> Filter
+            </button>
 
-        {showFilter && (
-          <div className="absolute right-32 top-14 w-64 bg-white border border-gray-300 rounded-lg shadow-lg p-4 z-50 text-black">
-            <div className="space-y-3 text-sm">
-              <div><label className="block font-semibold mb-1">Nomor (ID)</label><input type="text" value={filterId} onChange={(e) => setFilterId(e.target.value)} placeholder="Masukkan No..." className="w-full border border-gray-300 rounded-md p-2" /></div>
-              <div className="flex justify-end gap-2 pt-3">
-                <button onClick={() => { setFilterId(""); setFilterName(""); setFilterGender("All"); setShowFilter(false); }} className="text-gray-600 hover:underline">Reset</button>
-                <button onClick={() => setShowFilter(false)} className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Apply</button>
-              </div>
-            </div>
-          </div>
-        )}
+            {/* DYNAMIC FILTER MENU */}
+            {showFilter && (
+                <div className="absolute right-0 top-12 w-[450px] bg-white border border-gray-300 rounded-lg shadow-xl p-5 z-50 text-black animate-in fade-in zoom-in-95 duration-200">
+                    <div className="grid grid-cols-2 gap-4">
+                        
+                        {/* ID Filter */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Nomor (ID)</label>
+                            <input type="text" value={filterId} onChange={(e) => setFilterId(e.target.value)} placeholder="Cari ID..." className="w-full border border-gray-300 rounded p-2 text-sm focus:border-[#1E3A5F] outline-none" />
+                        </div>
 
-        <div className="flex gap-4">
-          <button className="flex items-center gap-2 px-4 py-2 border rounded text-black"><Icon icon="lucide:download" className="w-5 h-5" /> Import</button>
-          <button className="flex items-center gap-2 px-4 py-2 border rounded text-black"><Icon icon="lucide:upload" className="w-5 h-5" /> Export</button>
+                        {/* Status */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Status Karyawan</label>
+                            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm bg-white focus:border-[#1E3A5F] outline-none">
+                                <option value="All">Semua Status</option>
+                                {uniqueStatuses.map(status => <option key={status as string} value={status as string}>{getStatusLabel(status as string)}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Cabang */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Cabang</label>
+                            <select value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm bg-white focus:border-[#1E3A5F] outline-none">
+                                <option value="All">Semua Cabang</option>
+                                {uniqueBranches.map(branch => <option key={branch as string} value={branch as string}>{branch as string}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Jabatan */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Jabatan</label>
+                            <select value={filterPosition} onChange={(e) => setFilterPosition(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm bg-white focus:border-[#1E3A5F] outline-none">
+                                <option value="All">Semua Jabatan</option>
+                                {uniquePositions.map(pos => <option key={pos as string} value={pos as string}>{pos as string}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Grade */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Grade</label>
+                            <select value={filterGrade} onChange={(e) => setFilterGrade(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm bg-white focus:border-[#1E3A5F] outline-none">
+                                <option value="All">Semua Grade</option>
+                                {uniqueGrades.map(grade => <option key={grade as string} value={grade as string}>{grade as string}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Gender */}
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Gender</label>
+                            <select value={filterGender} onChange={(e) => setFilterGender(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm bg-white focus:border-[#1E3A5F] outline-none">
+                                <option value="All">Semua Gender</option>
+                                {uniqueGenders.map(gender => (
+                                    <option key={gender as string} value={gender as string}>
+                                        {gender === 'male' ? 'Laki-laki' : gender === 'female' ? 'Perempuan' : gender as string}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        {/* Sort By (Spans 2 columns) */}
+                        <div className="col-span-2">
+                            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Sort By</label>
+                            <select value={sortOption} onChange={(e) => setSortOption(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm bg-white focus:border-[#1E3A5F] outline-none">
+                                <option value="Default">Default</option>
+                                <option value="Name A-Z">Nama (A-Z)</option>
+                                <option value="Name Z-A">Nama (Z-A)</option>
+                                <option value="Date Newest">Paling Baru Bergabung</option>
+                                <option value="Date Oldest">Paling Lama Bergabung</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 mt-3 border-t border-gray-100">
+                        <button onClick={clearFilters} className="text-sm text-gray-500 hover:text-black">Reset Filters</button>
+                        <button onClick={() => setShowFilter(false)} className="bg-[#1E3A5F] text-white px-4 py-2 rounded text-sm hover:bg-[#2b4c75] shadow-sm">Terapkan Filter</button>
+                    </div>
+                </div>
+            )}
         </div>
 
-        <button onClick={() => { resetForm(); setShowModal(true); }} className="bg-[#1E3A5F] text-white px-4 py-2 rounded hover:bg-[#254b7b] flex items-center gap-1">
+        <div className="flex gap-4">
+          <button 
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 px-4 py-2 border rounded text-black hover:bg-gray-100 shadow-sm"
+          >
+            <Icon icon="lucide:download" className="w-5 h-5" /> Import
+          </button>
+          
+          <button 
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 border rounded text-black hover:bg-gray-100 shadow-sm"
+          >
+            <Icon icon="lucide:upload" className="w-5 h-5" /> Export
+          </button>
+        </div>
+
+        <button onClick={() => { resetForm(); setShowModal(true); }} className="bg-[#1E3A5F] text-white px-4 py-2 rounded hover:bg-[#254b7b] flex items-center gap-1 shadow-sm">
           <Icon icon="mdi:plus-circle-outline" className="w-5 h-5" /> Tambah Data
         </button>
       </div>
 
       {/* --- TABLE --- */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full bg-white shadow rounded">
+      <div className="overflow-x-auto min-h-[400px]">
+        <table className="min-w-full bg-white shadow rounded border-separate border-spacing-y-0">
           <thead>
             <tr className="bg-gray-200 text-left text-black">
-              <th className="p-2">No</th>
-              <th className="p-2">Avatar</th>
-              <th className="p-2">Nama</th>
-              <th className="p-2">Jenis Kelamin</th>
-              <th className="p-2">Nomor Telepon</th>
-              <th className="p-2">Cabang</th>
-              <th className="p-2">Jabatan</th>
-              <th className="p-2">Grade</th>
-              <th className="p-2">Status</th>
-              <th className="p-2 text-center">Action</th>
+              <th className="p-3 whitespace-nowrap">No</th>
+              <th className="p-3 whitespace-nowrap">Avatar</th>
+              <th className="p-3 whitespace-nowrap">Nama</th>
+              <th className="p-3 whitespace-nowrap">Jenis Kelamin</th>
+              <th className="p-3 whitespace-nowrap">Nomor Telepon</th>
+              <th className="p-3 whitespace-nowrap">Cabang</th>
+              <th className="p-3 whitespace-nowrap">Jabatan</th>
+              <th className="p-3 whitespace-nowrap">Grade</th>
+              <th className="p-3 whitespace-nowrap">Status</th>
+              <th className="p-3 text-center whitespace-nowrap">Action</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-                <tr><td colSpan={10} className="text-center p-4 text-black">Loading data...</td></tr>
+                <tr><td colSpan={10} className="text-center p-10 text-gray-500"><Icon icon="mdi:loading" className="animate-spin text-4xl mx-auto mb-2" /> Loading data...</td></tr>
+            ) : filteredEmployees.length === 0 ? (
+                <tr>
+                    <td colSpan={10} className="text-center py-20">
+                        <div className="flex flex-col items-center justify-center">
+                            <div className="bg-gray-50 p-6 rounded-full mb-4">
+                                <Icon icon="mdi:account-search-outline" className="text-4xl text-gray-400" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-gray-700 mb-1">No Employees Found</h3>
+                            <p className="text-gray-500 text-sm mb-6 max-w-xs">We couldn't find any records matching your current filters or search.</p>
+                            <button onClick={clearFilters} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm hover:bg-gray-50 font-medium flex items-center gap-2">
+                                <Icon icon="mdi:refresh" className="text-lg" /> Clear Filters
+                            </button>
+                        </div>
+                    </td>
+                </tr>
             ) : filteredEmployees.map((emp, index) => (
               <tr key={emp.id} className="border-b hover:bg-gray-50 text-black">
-                <td className="p-2">{index + 1}</td>
-                <td className="p-2">
+                <td className="p-3 border-b border-[#EEF2F5]">{index + 1}</td>
+                <td className="p-3 border-b border-[#EEF2F5]">
                    <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center font-bold text-gray-600">
                      {emp.first_name.charAt(0)}
                    </div>
                 </td>
-                <td className="p-2">
-                    <div className="font-medium">{emp.first_name} {emp.last_name}</div>
+                <td className="p-3 border-b border-[#EEF2F5]">
+                    <div className="font-medium whitespace-nowrap">{emp.first_name} {emp.last_name}</div>
                     <div className="text-[10px] text-gray-500">{emp.email}</div>
                 </td>
-                <td className="p-2">
-                  <span className={`px-2 py-1 rounded text-sm font-bold ${emp.gender === "male" ? "bg-blue-200 text-blue-800" : "bg-pink-200 text-pink-800"}`}>
-                    {emp.gender === 'male' ? 'Laki-laki' : 'Perempuan'}
+                <td className="p-3 border-b border-[#EEF2F5]">
+                  <span className={`px-2 py-1 rounded text-sm font-bold whitespace-nowrap ${emp.gender === "male" ? "bg-blue-200 text-blue-800" : emp.gender === "female" ? "bg-pink-200 text-pink-800" : "bg-gray-200 text-gray-800"}`}>
+                    {emp.gender === 'male' ? 'Laki-laki' : emp.gender === 'female' ? 'Perempuan' : emp.gender}
                   </span>
                 </td>
-                <td className="p-2">{emp.phone}</td>
-                <td className="p-2">{emp.branch}</td>
-                <td className="p-2">{emp.position}</td>
-                <td className="p-2">{emp.grade}</td>
+                <td className="p-3 border-b border-[#EEF2F5] whitespace-nowrap">{emp.phone || '-'}</td>
+                <td className="p-3 border-b border-[#EEF2F5] whitespace-nowrap">{emp.branch || '-'}</td>
+                <td className="p-3 border-b border-[#EEF2F5] whitespace-nowrap">{emp.position || '-'}</td>
+                <td className="p-3 border-b border-[#EEF2F5] whitespace-nowrap font-medium">{emp.grade || '-'}</td>
                 
                 {/* STATUS TOGGLE */}
-                <td className="p-2">
+                <td className="p-3 border-b border-[#EEF2F5] whitespace-nowrap">
                     <div className="flex items-center gap-3">
                         <div className={`w-10 h-5 rounded-full ${emp.employment_status !== 'resign' ? "bg-green-500" : "bg-gray-300"} relative transition-colors duration-200`}>
                             <span className={`absolute left-1 top-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${emp.employment_status !== 'resign' ? "translate-x-5" : ""}`}></span>
@@ -341,18 +651,14 @@ export default function EmployeePage() {
                     </div>
                 </td>
 
-                <td className="p-2 text-center">
+                <td className="p-3 text-center border-b border-[#EEF2F5] whitespace-nowrap">
                   <div className="flex justify-center gap-3">
-                    {/* TOMBOL DETAIL (DRAWER) */}
                     <button onClick={() => setSelectedEmployee(emp)} className="bg-blue-500 border border-blue-200 rounded-l p-2 hover:bg-blue-100 transition">
                         <Icon icon="ant-design:file-add-filled" className="w-5 h-5 text-white" />
                     </button>
-                    
-                    {/* TOMBOL EDIT */}
                     <button onClick={() => handleEdit(emp)} className="bg-yellow-500 border border-yellow-200 rounded-l p-2 hover:bg-yellow-800 transition">
                         <Icon icon="line-md:edit" className="w-5 h-5 text-white" />
                     </button>
-
                     <button onClick={() => handleDelete(emp.id)} className="bg-red-700 border border-red-100 rounded-l p-2 hover:bg-red-100 transition">
                         <Icon icon="material-symbols:delete" className="w-5 h-5 text-white" />
                     </button>
@@ -422,6 +728,99 @@ export default function EmployeePage() {
               </form>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* --- IMPORT MODAL --- */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white w-[650px] rounded-2xl shadow-2xl p-6 relative">
+                <button onClick={() => {setShowImportModal(false); setImportData([]);}} className="absolute top-4 right-4 text-gray-500 hover:text-black">
+                    <Icon icon="mdi:close" className="text-2xl" />
+                </button>
+                
+                <h2 className="text-2xl font-bold text-[#1E3A5F] mb-1 flex items-center gap-2">
+                    <Icon icon="mdi:file-import" /> Import Data Karyawan
+                </h2>
+                <p className="text-gray-500 text-sm mb-6">Tambah banyak karyawan sekaligus menggunakan file CSV.</p>
+
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex justify-between items-center shadow-sm">
+                    <div>
+                        <h3 className="font-semibold text-blue-900 text-sm">Langkah 1: Download Template</h3>
+                        <p className="text-xs text-blue-700 mt-1">Template ini sudah berisi instruksi cara mengisi tiap kolom.</p>
+                    </div>
+                    <button onClick={handleDownloadTemplate} className="bg-white border border-blue-300 text-blue-700 px-4 py-2 rounded text-sm font-semibold hover:bg-blue-100 transition-colors flex items-center gap-2">
+                        <Icon icon="mdi:microsoft-excel" className="text-lg" /> Download
+                    </button>
+                </div>
+
+                <div className="mb-6">
+                    <h3 className="font-semibold text-gray-700 text-sm mb-2">Langkah 2: Upload CSV yang sudah diisi</h3>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 bg-gray-50 transition-colors relative cursor-pointer">
+                        <input 
+                            type="file" 
+                            accept=".csv" 
+                            onChange={handleFileUpload}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <Icon icon="mdi:cloud-upload" className="text-4xl text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-700 font-bold">Klik disini atau Drag & Drop file CSV Anda</p>
+                        <p className="text-xs text-gray-400 mt-1">Pastikan Anda tidak mengubah baris pertama (Header)</p>
+                    </div>
+                </div>
+
+                {importData.length > 0 && (
+                    <div className="mb-6">
+                        <h3 className="font-semibold text-gray-700 text-sm mb-2 flex items-center gap-2">
+                            <Icon icon="mdi:eye-check" className="text-green-600" />
+                            Preview ({importData.length} data terbaca)
+                        </h3>
+                        <div className="max-h-40 overflow-y-auto border rounded-lg text-xs bg-white">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-gray-100 sticky top-0 shadow-sm">
+                                    <tr>
+                                        <th className="p-3 text-gray-700">Nama</th>
+                                        <th className="p-3 text-gray-700">Email</th>
+                                        <th className="p-3 text-gray-700">Jabatan</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {importData.slice(0, 5).map((row, idx) => (
+                                        <tr key={idx} className="border-t text-gray-600 hover:bg-gray-50">
+                                            <td className="p-3 font-medium text-black">{row.first_name} {row.last_name}</td>
+                                            <td className="p-3">{row.email}</td>
+                                            <td className="p-3">{row.position || '-'}</td>
+                                        </tr>
+                                    ))}
+                                    {importData.length > 5 && (
+                                        <tr><td colSpan={3} className="p-3 text-center text-gray-400 italic bg-gray-50">...dan {importData.length - 5} baris lainnya</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {isImporting && (
+                    <div className="mb-4">
+                        <div className="flex justify-between text-xs text-gray-600 mb-1">
+                            <span>Sedang mengimpor...</span>
+                            <span>{importProgress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${importProgress}%` }}></div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                    <button onClick={() => {setShowImportModal(false); setImportData([]);}} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 font-medium">Batal</button>
+                    <button onClick={handleBulkImport} disabled={importData.length === 0 || isImporting} className="px-6 py-2 bg-[#1E3A5F] text-white rounded hover:bg-[#162c4b] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-bold shadow-sm">
+                        {isImporting ? <Icon icon="mdi:loading" className="animate-spin text-lg" /> : <Icon icon="mdi:database-import" className="text-lg" />}
+                        {isImporting ? "Memproses..." : "Mulai Import"}
+                    </button>
+                </div>
+            </div>
         </div>
       )}
 
